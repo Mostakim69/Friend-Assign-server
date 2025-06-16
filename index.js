@@ -81,6 +81,67 @@ async function run() {
       }
     });
 
+    // Endpoint to update an assignment
+    app.put('/api/assignments/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const userEmail = req.body.userEmail;
+        const updatedAssignment = req.body;
+
+        if (!userEmail) {
+          return res.status(400).send({ message: 'User email is required' });
+        }
+
+        const assignment = await assignmentsCollection.findOne({ _id: new ObjectId(id) });
+        if (!assignment) {
+          return res.status(404).send({ message: 'Assignment not found' });
+        }
+
+        if (assignment.userEmail !== userEmail) {
+          return res.status(403).send({ message: 'You are not authorized to update this assignment' });
+        }
+
+        // Validate required fields
+        if (
+          !updatedAssignment.title ||
+          !updatedAssignment.description ||
+          !updatedAssignment.marks ||
+          !updatedAssignment.thumbnailUrl ||
+          !updatedAssignment.difficulty ||
+          !updatedAssignment.dueDate ||
+          !updatedAssignment.userEmail ||
+          !updatedAssignment.userName
+        ) {
+          return res.status(400).send({ message: 'All fields are required' });
+        }
+
+        const result = await assignmentsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              title: updatedAssignment.title,
+              description: updatedAssignment.description,
+              marks: parseInt(updatedAssignment.marks),
+              thumbnailUrl: updatedAssignment.thumbnailUrl,
+              difficulty: updatedAssignment.difficulty,
+              dueDate: updatedAssignment.dueDate,
+              userEmail: updatedAssignment.userEmail,
+              userName: updatedAssignment.userName,
+            },
+          }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.status(200).send({ message: 'Assignment updated successfully' });
+        } else {
+          res.status(500).send({ message: 'Failed to update assignment' });
+        }
+      } catch (error) {
+        console.error('Error updating assignment:', error);
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
     // Endpoint to delete an assignment
     app.delete('/api/assignments/:id', async (req, res) => {
       try {
