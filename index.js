@@ -34,6 +34,12 @@ async function run() {
       const result = await assignmentsCollection.insertOne(assignment);
       res.status(201).send(result);
     });
+
+    // Endpoint to get all assignments
+    app.get('/api/assignments', async (req, res) => {
+      const assignments = await assignmentsCollection.find().toArray();
+      res.status(200).send(assignments);
+    });
   } finally {
     // await client.close();
   }
