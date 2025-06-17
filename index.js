@@ -32,10 +32,10 @@ const canMarkSubmission = async (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
-    console.log('Attempting MongoDB connection...');
-    await client.db('admin').command({ ping: 1 });
-    console.log('Pinged your deployment. You successfully connected to MongoDB!');
+    // await client.connect();
+    // console.log('Attempting MongoDB connection...');
+    // await client.db('admin').command({ ping: 1 });
+    // console.log('Pinged your deployment. You successfully connected to MongoDB!');
 
     const db = client.db('assignmentDB');
     const assignmentsCollection = db.collection('assignments');
