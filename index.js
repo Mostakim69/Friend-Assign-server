@@ -21,20 +21,45 @@ const client = new MongoClient(uri, {
   },
 });
 
+// Middleware to check if the user is authorized to mark
+const canMarkSubmission = async (req, res, next) => {
+  const { userEmail } = req.body;
+  const id = req.params.id;
+
+  if (!userEmail) {
+    return res.status(400).send({ message: 'User email is required' });
+  }
+
+  try {
+    const submission = await client.db('assignmentDB').collection('submissions').findOne({ _id: new ObjectId(id) });
+    if (!submission) {
+      return res.status(404).send({ message: 'Submission not found' });
+    }
+    if (submission.userEmail === userEmail) {
+      return res.status(403).send({ message: 'You cannot mark your own submission' });
+    }
+    next();
+  } catch (error) {
+    console.error('Error checking submission ownership:', error);
+    res.status(500).send({ message: 'Server error' });
+  }
+};
+
 async function run() {
   try {
     await client.connect();
+    console.log('Attempting MongoDB connection...');
     await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
 
     const db = client.db('assignmentDB');
     const assignmentsCollection = db.collection('assignments');
+    const submissionsCollection = db.collection('submissions');
 
-    // Endpoint to create a new assignment
+    // Existing endpoints (unchanged)
     app.post('/api/assignments', async (req, res) => {
       try {
         const assignment = req.body;
-        // Validate required fields
         if (
           !assignment.title ||
           !assignment.description ||
@@ -55,7 +80,6 @@ async function run() {
       }
     });
 
-    // Endpoint to get all assignments
     app.get('/api/assignments', async (req, res) => {
       try {
         const assignments = await assignmentsCollection.find().toArray();
@@ -66,7 +90,6 @@ async function run() {
       }
     });
 
-    // Endpoint to get a single assignment by ID
     app.get('/api/assignments/:id', async (req, res) => {
       try {
         const id = req.params.id;
@@ -81,7 +104,6 @@ async function run() {
       }
     });
 
-    // Endpoint to update an assignment
     app.put('/api/assignments/:id', async (req, res) => {
       try {
         const id = req.params.id;
@@ -101,7 +123,6 @@ async function run() {
           return res.status(403).send({ message: 'You are not authorized to update this assignment' });
         }
 
-        // Validate required fields
         if (
           !updatedAssignment.title ||
           !updatedAssignment.description ||
@@ -142,11 +163,10 @@ async function run() {
       }
     });
 
-    // Endpoint to delete an assignment
     app.delete('/api/assignments/:id', async (req, res) => {
       try {
         const id = req.params.id;
-        const userEmail = req.body.userEmail; // Expect userEmail in the request body
+        const userEmail = req.body.userEmail;
         if (!userEmail) {
           return res.status(400).send({ message: 'User email is required' });
         }
@@ -169,20 +189,111 @@ async function run() {
       }
     });
 
+    app.post('/api/assignments/:id/submit', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const submission = req.body;
+
+        if (!submission.googleDocsLink || !submission.userEmail || !submission.userName) {
+          return res.status(400).send({ message: 'Google Docs link, user email, and user name are required' });
+        }
+
+        const assignment = await assignmentsCollection.findOne({ _id: new ObjectId(id) });
+        if (!assignment) {
+          return res.status(404).send({ message: 'Assignment not found' });
+        }
+
+        const submissionData = {
+          assignmentId: id,
+          title: assignment.title,
+          marks: parseInt(assignment.marks),
+          googleDocsLink: submission.googleDocsLink,
+          notes: submission.notes || '',
+          userEmail: submission.userEmail,
+          userName: submission.userName,
+          status: 'pending',
+          submittedAt: new Date(),
+          obtainedMarks: null,
+          feedback: null,
+        };
+
+        const result = await submissionsCollection.insertOne(submissionData);
+        res.status(201).send({ message: 'Assignment submitted successfully', submissionId: result.insertedId });
+      } catch (error) {
+        console.error('Error submitting assignment:', error);
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
+    // New endpoint to get all submissions (pending and completed)
+    app.get('/api/submissions', async (req, res) => {
+      try {
+        console.log('Fetching all submissions...');
+        const allSubmissions = await submissionsCollection.find().toArray();
+        res.status(200).send(allSubmissions);
+      } catch (error) {
+        console.error('Error fetching submissions:', error);
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
+    app.get('/api/submissions/pending', async (req, res) => {
+      try {
+        console.log('Fetching pending submissions...');
+        const pendingSubmissions = await submissionsCollection
+          .find({ status: 'pending' })
+          .toArray();
+        console.log('Submissions found:', pendingSubmissions);
+        res.status(200).send(pendingSubmissions);
+      } catch (error) {
+        console.error('Error fetching pending submissions:', error);
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
+    app.put('/api/submissions/:id/mark', canMarkSubmission, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { obtainedMarks, feedback } = req.body;
+
+        if (!obtainedMarks || isNaN(obtainedMarks) || obtainedMarks < 0) {
+          return res.status(400).send({ message: 'Valid marks are required' });
+        }
+
+        const result = await submissionsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              obtainedMarks: parseInt(obtainedMarks),
+              feedback: feedback || '',
+              status: 'completed',
+              markedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.status(200).send({ message: 'Submission marked successfully' });
+        } else {
+          res.status(404).send({ message: 'Submission not found' });
+        }
+      } catch (error) {
+        console.error('Error marking submission:', error);
+        res.status(500).send({ message: 'Server error' });
+      }
+    });
+
   } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
+    console.error('Failed to connect to MongoDB:', error.message, error.stack);
   }
-  // Do not close the client here to keep the connection alive
 }
 
 run().catch(console.dir);
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.send('Assignment Code Cooking');
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`Assignment code server is running on port ${port}`);
 });
