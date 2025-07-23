@@ -1,7 +1,6 @@
-# 🍽️ HobbyHub  Web App
+# Website Theme⭐ Online Group-Study assignment  Web App
 
-Welcome to **HobbyHub**,HobbyHub is a community-driven web platform that allows users to create, join, and manage local hobby-based groups. Whether you're into painting, gaming, hiking, or coding, HobbyHub helps you connect with like-minded individuals in your area.
----
+Welcome to **FriendAssign**,, you will build a web application for online group study with friends (Every registered user is a friend of others). Users can create assignments, complete them, and grade their friends' assignments.
 
 ## 📌 Project Overview
 
